@@ -1,0 +1,144 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SecureExam — Secure. Resilient. Transparent.</title>
+<style>
+:root{--ink:#0f1f3d;--bg:#f4f6fb;--card:#fff;--line:#dfe4ee;--pri:#1746c9;--ok:#0f8a5f;--warn:#c77700;--bad:#c62839;--mut:#5b6785}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+a{color:var(--pri);text-decoration:none;cursor:pointer}h1,h2,h3{margin:.2em 0}
+nav{background:var(--ink);color:#fff;display:flex;gap:16px;align-items:center;padding:10px 20px;flex-wrap:wrap}nav b{font-size:18px;margin-right:auto}nav a{color:#cfd9f5}nav a:hover{color:#fff}
+main{max-width:1100px;margin:20px auto;padding:0 16px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}.stat b{font-size:26px;display:block}.stat span{color:var(--mut);font-size:13px}
+button,.btn{background:var(--pri);color:#fff;border:0;border-radius:7px;padding:8px 14px;font:inherit;cursor:pointer;display:inline-block}button.s{background:#e8ecf7;color:var(--ink)}button.d{background:var(--bad)}button.o{background:var(--ok)}button:disabled{opacity:.5}
+input,select,textarea{font:inherit;padding:8px;border:1px solid var(--line);border-radius:7px;width:100%;margin:3px 0 10px}label{font-size:13px;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:600}.tw{overflow-x:auto}
+.tag{padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600;background:#e8ecf7}.HIGH{background:#fde3e6;color:var(--bad)}.MEDIUM{background:#fff0d6;color:var(--warn)}.LOW{background:#e5efff;color:var(--pri)}.INFO{background:#eef0f4;color:var(--mut)}.ok{background:#dcf5ea;color:var(--ok)}
+.hero{padding:50px 16px;text-align:center}.hero h1{font-size:40px}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.bar{height:10px;background:#e8ecf7;border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--pri)}
+.exam{display:grid;grid-template-columns:1fr 260px;gap:16px}.opt{display:block;border:2px solid var(--line);border-radius:9px;padding:12px;margin:8px 0;cursor:pointer;background:#fff;width:100%;text-align:left;color:var(--ink)}.opt.sel{border-color:var(--pri);background:#eaf0ff}
+.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.nav button{background:#e8ecf7;color:var(--ink);padding:7px 0}.nav .a{background:var(--ok);color:#fff}.nav .m{background:var(--warn);color:#fff}.nav .c{outline:3px solid var(--pri)}
+.stbar{position:sticky;top:0;z-index:5;padding:10px 16px;border-radius:8px;font-weight:600;margin-bottom:12px}.st-on{background:#dcf5ea;color:var(--ok)}.st-off{background:#fde3e6;color:var(--bad)}.st-sync{background:#fff0d6;color:var(--warn)}
+.demo{border:2px dashed var(--warn);background:#fffaf0;padding:10px;border-radius:9px;font-size:13px}.warnb{background:#fff0d6;color:var(--warn);padding:6px 10px;border-radius:7px;margin-bottom:8px;font-size:13px}
+@media(max-width:800px){.exam,.two{grid-template-columns:1fr}.hero h1{font-size:28px}}
+</style></head><body><div id="nav"></div><main id="app"></main>
+<script>
+const $=s=>document.querySelector(s),A=$('#app');let ME=null,T=[],EX=null;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fd=s=>s?new Date(s).toLocaleString():'—';
+async function api(p,m='GET',b){const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||r.statusText),{status:r.status});return d}
+const tag=s=>`<span class="tag ${esc(s)}">${esc(s)}</span>`;
+function bar(){$('#nav').innerHTML=`<nav><b>🛡 SecureExam</b>`+(!ME?`<a href="#">Home</a><a href="#login">Login</a><a href="#register">Register</a>`:
+ ME.role=='admin'?`<a href="#a/overview">Overview</a><a href="#a/exams">Exams</a><a href="#a/monitor">Monitoring</a><a href="#a/students">Students</a><a href="#a/audit">Audit Logs</a><a onclick="logout()">Logout (${esc(ME.name)})</a>`:
+ `<a href="#dash">Dashboard</a><a onclick="logout()">Logout (${esc(ME.name)})</a>`)+`</nav>`}
+async function logout(){try{await api('/auth/logout','POST')}catch(e){}ME=null;location.hash='#login';route()}
+function clear(){T.forEach(clearInterval);T=[];if(EX){EX.stop();EX=null}}
+async function route(){clear();if(!ME){try{ME=(await api('/auth/me')).user}catch(e){}}bar();
+ const p=location.hash.slice(1).split('/')[0];if(p=='login')return loginV();if(p=='register')return regV();
+ if(!ME){if(!p)return landing();location.hash='#login'}}
+window.onhashchange=()=>go();
+function go(){clear();const h=location.hash.slice(1),[p,a,b]=h.split('/');if(!ME)return route();bar();
+ const run=f=>f().catch(e=>{if(e.status==401){ME=null;return route()}A.innerHTML=`<div class="card">${esc(e.message)}</div>`});
+ if(!h){location.hash=ME.role=='admin'?'#a/overview':'#dash';return}if(p=='login'||p=='register')return route();
+ if(p=='a'){if(ME.role!='admin'){A.innerHTML='<div class="card">403 — Admin only.</div>';return}
+  return run(()=>({overview,exams:examsA,exam:()=>examA(b),monitor,students,audit})[a||'overview']())}
+ if(ME.role=='admin'){location.hash='#a/overview';return}
+ if(p=='dash')return run(dash);if(p=='exam')return run(()=>instr(a));if(p=='take')return run(()=>take(+a));if(p=='result')return run(()=>result(+a));
+ return run(dash)}
+async function init(){try{ME=(await api('/auth/me')).user}catch(e){}bar();
+ if(ME&&!location.hash)location.hash=ME.role=='admin'?'#a/overview':'#dash';else go()}
+function landing(){A.innerHTML=`<div class="hero"><h1>SecureExam</h1><h2 style="color:var(--pri)">Secure. Resilient. Transparent.</h2>
+<p style="max-width:640px;margin:12px auto;color:var(--mut)">A resilient online assessment platform designed for secure, reliable and trustworthy digital examinations.</p>
+<a class="btn" href="#login">Try Demo</a> <a class="btn s" style="color:var(--ink);background:#e8ecf7" href="#register">Register</a></div>
+<div class="two"><div class="card"><h3>The problem</h3><p>Connection drops lose answers, weak authentication and missing records reduce trust in online exams.</p></div>
+<div class="card"><h3>The solution</h3><p>Answers are saved in the browser first and synced to the server when the connection allows. Every event is audit-logged.</p></div></div>
+<div class="grid"><div class="card"><b>Resilience</b><br>Local queue + sync API. Nothing is lost during temporary disconnects.</div><div class="card"><b>Security</b><br>Hashed passwords, RBAC, server-side timing &amp; grading, no answer keys sent to browsers.</div><div class="card"><b>Transparency</b><br>Audit trail and a simple rule-based suspicious activity detector (not AI).</div></div>
+<div class="card"><h3>Honest scope</h3><p>Prototype. It detects and records certain behaviours (tab switches, reconnects); it does not claim to prevent all cheating. Built by Team Explorer for the MPOnline Hackathon 2026, Challenge 6.</p></div>`}
+function loginV(){A.innerHTML=`<div class="card" style="max-width:420px;margin:auto"><h2>Login</h2><div id=err class="tag HIGH" hidden></div><label>Email</label><input id=em type=email autocomplete=username><label>Password</label><input id=pw type=password autocomplete=current-password>
+<button onclick="doLogin()">Login</button><hr><div class="demo"><b>Demo accounts (demonstration only)</b><br>Student: student@secureexam.demo / Demo@1234<br>Admin: admin@secureexam.demo / Admin@1234<br>
+<button class=s onclick="fill('student@secureexam.demo','Demo@1234')">Fill student</button> <button class=s onclick="fill('admin@secureexam.demo','Admin@1234')">Fill admin</button></div></div>`;
+ $('#pw').onkeydown=e=>e.key=='Enter'&&doLogin()}
+function fill(e,p){$('#em').value=e;$('#pw').value=p}
+async function doLogin(){try{ME=(await api('/auth/login','POST',{email:$('#em').value,password:$('#pw').value})).user;location.hash=ME.role=='admin'?'#a/overview':'#dash';go()}catch(e){const r=$('#err');r.hidden=false;r.textContent=e.message}}
+function regV(){A.innerHTML=`<div class="card" style="max-width:420px;margin:auto"><h2>Student registration</h2><div id=err class="tag HIGH" hidden></div><label>Full name</label><input id=nm><label>Email</label><input id=em type=email><label>Password (min 8, letters + digits)</label><input id=pw type=password><button onclick="doReg()">Create account</button></div>`}
+async function doReg(){try{await api('/auth/register','POST',{name:$('#nm').value,email:$('#em').value,password:$('#pw').value});alert('Registered. Please login.');location.hash='#login'}catch(e){const r=$('#err');r.hidden=false;r.textContent=e.message}}
+/* ---------- student ---------- */
+async function dash(){const [{exams},{history}]=await Promise.all([api('/exams'),api('/student/history')]);
+ const done=exams.filter(e=>e.status=='submitted'),avail=exams.filter(e=>e.status!='submitted'),avg=done.length?Math.round(done.reduce((s,e)=>s+100*e.score/(e.total||1),0)/done.length):0;
+ A.innerHTML=`<h2>Welcome, ${esc(ME.name)}</h2><p style="color:var(--mut)">Student ID: <b>${esc(ME.student_id)}</b> · Security status: <span class="tag ok">Session active · password hashed · RBAC enforced</span></p>
+ <div class="grid"><div class="stat"><b>${avail.length}</b><span>Available Exams</span></div><div class="stat"><b>0</b><span>Upcoming</span></div><div class="stat"><b>${done.length}</b><span>Completed</span></div><div class="stat"><b>${avg}%</b><span>Average Score</span></div></div>
+ <div class="card"><h3>Exams</h3><div class=tw><table><tr><th>Exam</th><th>Duration</th><th>Questions</th><th>Status</th><th></th></tr>${exams.map(e=>`<tr><td>${esc(e.title)}</td><td>${e.duration_min} min</td><td>${e.nq}</td><td>${e.status=='submitted'?`Completed: ${e.score}/${e.total}`:e.status=='in_progress'?'In progress':'Not started'}</td><td>${e.status=='submitted'?`<a href="#result/${e.attempt_id}">Result</a>`:`<a class=btn href="#exam/${e.id}">${e.status?'Resume':'View / Start'}</a>`}</td></tr>`).join('')||'<tr><td>No exams published.</td></tr>'}</table></div></div>
+ <div class="card"><h3>Recent activity</h3>${history.map(h=>`<div>${tag(h.severity)} ${esc(h.type)} <small>${fd(h.ts)}</small></div>`).join('')||'—'}</div>`}
+async function instr(id){const {exam:e}=await api('/exams/'+id);
+ A.innerHTML=`<div class="card"><h2>${esc(e.title)}</h2><p>${esc(e.description)}</p><p><b>${e.duration_min} minutes</b> · ${e.nq} questions · ${e.total} marks</p><ul><li>The timer is enforced by the server; the on-screen timer is a convenience.</li><li>Answers are saved automatically and kept locally if your connection drops.</li><li>Tab switches and connection events are recorded in an audit log.</li><li>You may attempt this exam once.</li></ul><button id=sb>Start / Resume exam</button></div>`;
+ $('#sb').onclick=async()=>{try{const r=await api(`/exams/${id}/start`,'POST');location.hash='#take/'+r.attempt_id}catch(e){alert(e.message)}}}
+const LS=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
+async function take(aid){const d=await api('/attempts/'+aid);if(d.status!='in_progress'){location.hash='#result/'+aid;return}
+ const key='se_q_'+aid,ex=EX={aid,d,key,idx:0,marked:new Set(),demo:false,off(){return this.demo||navigator.onLine===false},status:'on',saving:'',
+  store:LS(key)||{ans:{},ev:[]},off_:null,off2:0,timer:null,syncing:false,stop(){document.removeEventListener('visibilitychange',this.vis);removeEventListener('online',this.on);removeEventListener('offline',this.offl);clearInterval(this.timer)}};
+ for(const k in d.answers)if(!ex.store.ans[k])ex.store.ans[k]={s:d.answers[k],ts:'0',p:0};
+ ex.skew=Date.parse(d.server_now)-Date.now();ex.left=()=>Math.floor((Date.parse(d.deadline)-(Date.now()+ex.skew))/1000);
+ const save=()=>{try{localStorage.setItem(key,JSON.stringify(ex.store))}catch(e){}};ex.save=save;
+ ex.vis=()=>{queue({type:document.visibilityState=='hidden'?'TAB_SWITCH':'TAB_RETURN'});if(document.visibilityState=='visible'){ex.warn='You left the exam tab — this was recorded.';draw();setTimeout(()=>{ex.warn='';draw()},4000)}};
+ ex.on=()=>net(true);ex.offl=()=>net(false);
+ document.addEventListener('visibilitychange',ex.vis);addEventListener('online',ex.on);addEventListener('offline',ex.offl);
+ function queue(ev){ev.ts=new Date().toISOString();ex.store.ev.push(ev);save();if(!ex.off())flush()}
+ async function flush(){if(ex.off()||ex.syncing)return;const pend=Object.entries(ex.store.ans).filter(([k,v])=>v.p).map(([k,v])=>({question_id:+k,selected:v.s,ts:v.ts})),evs=ex.store.ev.slice();
+  if(!pend.length&&!evs.length){return}ex.syncing=true;
+  try{const r=await api(`/attempts/${aid}/sync`,'POST',{answers:pend,events:evs});const ok=new Set(r.synced.map(String));
+   pend.forEach(p=>{const c=ex.store.ans[p.question_id];if(c&&c.ts==p.ts&&ok.has(String(p.question_id)))c.p=0});ex.store.ev=ex.store.ev.slice(evs.length);save();
+   ex.saving=ex.recovering?'':'Synced ✓';if(ex.recovering){ex.status='on';ex.msg='✓ Connection Restored — Answers Synchronized';ex.recovering=false;setTimeout(()=>{ex.msg='';draw()},6000)}}
+  catch(e){if(e.status==409){alert('This attempt was already submitted.');location.hash='#result/'+aid;return}ex.saving='Offline — Saved locally';ex.status='off'}
+  ex.syncing=false;draw();if(ex.late&&!ex.off())doSubmit(true)}
+ function net(online){if(online){if(ex.demo||navigator.onLine===false)return;ex.status='sync';ex.recovering=true;ex.msg='';queue({type:'NETWORK_RESTORED'});draw();flush()}
+  else{if(ex.status=='off')return;ex.status='off';ex.recovering=false;ex.msg='';ex.store.ev.push({type:'NETWORK_LOST',ts:new Date().toISOString()});save();ex.saving='Offline — Saved locally';draw()}}
+ ex.goOff=()=>{ex.demo=true;net(false)};ex.goOn=()=>{ex.demo=false;net(true)};
+ ex.pick=k=>{const q=d.questions[ex.idx];ex.store.ans[q.id]={s:k,ts:new Date().toISOString(),p:1};save();ex.saving=ex.off()?'Offline — Saved locally':'Saving...';draw();clearTimeout(ex.deb);ex.deb=setTimeout(()=>{flush()},400)};
+ ex.go=i=>{ex.idx=i;queue({type:'QUESTION_VIEWED'});draw()};
+ async function doSubmit(auto){if(ex.off()){ex.late=auto;alert(auto?'Time is up. Answers are saved locally and will be submitted automatically once you are back online.':'You are offline. Reconnect to submit; your answers are safe locally.');return}
+  await flush();try{await api(`/attempts/${aid}/submit`,'POST');localStorage.removeItem(key);location.hash='#result/'+aid}catch(e){alert(e.message)}}
+ ex.submit=()=>{if(confirm('Submit the exam now?'))doSubmit(false)};
+ ex.timer=setInterval(()=>{const t=ex.left(),el=$('#tm');if(el){el.textContent=fmt(t);el.style.color=t<=300?'var(--bad)':''}if(t<=0&&!ex.expired){ex.expired=true;doSubmit(true)}},1000);
+ const fmt=s=>{s=Math.max(0,s);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+ function draw(){const q=d.questions[ex.idx],a=ex.store.ans,ans=d.questions.filter(x=>a[x.id]&&a[x.id].s).length,mk=ex.marked.size;
+  const txt=ex.status=='off'?'⚠ Connection Lost — Answers saved locally':ex.status=='sync'?'✓ Connection Restored — Synchronizing...':'● Connected';
+  A.innerHTML=`<div class="stbar st-${ex.status=='off'?'off':ex.status=='sync'?'sync':'on'}">${txt}${ex.msg?' · '+ex.msg:''} <span style="float:right;font-weight:400">${ex.saving||'Auto-save on'}${Object.values(a).some(v=>v.p)?' · '+Object.values(a).filter(v=>v.p).length+' pending':''}</span></div>
+  ${ex.warn?`<div class=warnb>${ex.warn}</div>`:''}
+  <div class="card" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><b>${esc(d.title)}</b><br><small>${esc(d.student.name)} · ${esc(d.student.student_id)} · Exam #${d.exam_id} · Attempt #${aid}</small></div><div style="font-size:28px;font-weight:700" id=tm>${fmt(ex.left())}</div></div>
+  <div class=exam><div class=card><small>Question ${ex.idx+1} of ${d.questions.length} · ${q.marks} mark(s)</small><h3>${esc(q.text)}</h3>
+  ${q.options.map((o,i)=>`<button class="opt ${a[q.id]&&a[q.id].s==o.key?'sel':''}" onclick="EX.pick('${o.key}')"><b>${'ABCD'[i]}.</b> ${esc(o.text)}</button>`).join('')}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class=s ${ex.idx?'':'disabled'} onclick="EX.go(EX.idx-1)">← Previous</button><button class=s ${ex.idx<d.questions.length-1?'':'disabled'} onclick="EX.go(EX.idx+1)">Next →</button>
+  <button class=s onclick="EX.mark()">${ex.marked.has(q.id)?'Unmark':'Mark'} for review</button><button class=s onclick="EX.clr()">Clear answer</button><button class=o style="margin-left:auto" onclick="EX.submit()">Submit exam</button></div></div>
+  <div><div class=card><b>Navigator</b><div class=nav style="margin:8px 0">${d.questions.map((x,i)=>`<button class="${ex.marked.has(x.id)?'m':a[x.id]&&a[x.id].s?'a':''} ${i==ex.idx?'c':''}" onclick="EX.go(${i})">${i+1}</button>`).join('')}</div>
+  <small>Answered ${ans} · Unanswered ${d.questions.length-ans} · Review ${mk}</small></div>
+  <div class=demo><b>Demo Mode: Simulate Network Failure</b><br><small>Controlled prototype demonstration only — it does not reproduce every real-world network failure. (Real offline/online browser events are also handled.)</small><br><br>
+  ${ex.demo?'<button class=o onclick="EX.goOn()">Restore Network</button>':'<button class=d onclick="EX.goOff()">Simulate Network Failure</button>'}</div></div></div>`}
+ ex.mark=()=>{const id=d.questions[ex.idx].id;ex.marked.has(id)?ex.marked.delete(id):ex.marked.add(id);draw()};
+ ex.clr=()=>{const q=d.questions[ex.idx];ex.store.ans[q.id]={s:null,ts:new Date().toISOString(),p:1};save();draw();flush()};
+ draw();if(Object.values(ex.store.ans).some(v=>v.p)||ex.store.ev.length)flush()}
+async function result(aid){const d=await api('/attempts/'+aid);const p=d.total?Math.round(100*d.score/d.total):0;
+ A.innerHTML=`<div class="card" style="max-width:520px;margin:auto;text-align:center"><h2>${esc(d.title)}</h2><p>Exam submitted. Timing and grading were validated on the server.</p><div style="font-size:48px;font-weight:700">${d.score}/${d.total}</div><div class=bar><i style="width:${p}%"></i></div><p>${p}% · ${d.answered} questions answered</p><a class=btn href="#dash">Back to dashboard</a></div>`}
+/* ---------- admin ---------- */
+async function overview(){const {stats:s,question_perf:qp}=await api('/admin/dashboard'),c=[['Total students',s.students],['Active exams',s.active_exams],['Completed attempts',s.completed],['In progress',s.in_progress],['Average score',s.avg_pct+'%'],['Highest / Lowest',s.highest+' / '+s.lowest],['Completion rate',s.completion_rate+'%'],['Suspicious events',s.suspicious],['Network incidents',s.network_incidents],['Successful syncs',s.syncs]];
+ A.innerHTML=`<h2>Admin overview</h2><div class=grid>${c.map(x=>`<div class=stat><b>${x[1]}</b><span>${x[0]}</span></div>`).join('')}</div><div class=card><h3>Question performance (% correct, hardest first)</h3>${qp.map(x=>`<div>${esc(x.text)} — ${x.pct}%<div class=bar><i style="width:${x.pct}%"></i></div></div>`).join('')||'No completed attempts yet.'}</div>`}
+async function examsA(){const {exams}=await api('/exams');
+ A.innerHTML=`<h2>Exam management</h2><div class=card><h3>Create exam</h3><div class=two><div><label>Title</label><input id=t></div><div><label>Duration (minutes)</label><input id=du type=number value=30></div></div><label>Description</label><input id=ds><button onclick="mk()">Create</button></div>
+ <div class=card><div class=tw><table><tr><th>Title</th><th>Min</th><th>Questions</th><th>Marks</th><th>Status</th><th></th></tr>${exams.map(e=>`<tr><td>${esc(e.title)}</td><td>${e.duration_min}</td><td>${e.nq}</td><td>${e.total}</td><td>${e.published?'<span class="tag ok">Published</span>':'<span class=tag>Draft</span>'}</td><td><a href="#a/exam/${e.id}">Manage</a> · <a onclick="pubx(${e.id},${e.published?0:1})">${e.published?'Unpublish':'Publish'}</a> · <a onclick="delx(${e.id})">Delete</a></td></tr>`).join('')}</table></div></div>`}
+async function mk(){try{await api('/exams','POST',{title:$('#t').value,duration_min:+$('#du').value,description:$('#ds').value});examsA()}catch(e){alert(e.message)}}
+async function pubx(id,v){try{await api('/exams/'+id,'PUT',{published:v});examsA()}catch(e){alert(e.message)}}
+async function delx(id){if(confirm('Delete exam, questions and attempts?')){await api('/exams/'+id,'DELETE');examsA()}}
+async function examA(id){const {exam:e}=await api('/exams/'+id);
+ A.innerHTML=`<a href="#a/exams">← Exams</a><h2>${esc(e.title)}</h2><div class=card><div class=two><div><label>Title</label><input id=t value="${esc(e.title)}"></div><div><label>Duration (min)</label><input id=du type=number value=${e.duration_min}></div></div><button onclick="upd(${id})">Save exam</button></div>
+ <div class=card><h3>Questions (${e.questions.length})</h3><div class=tw><table><tr><th>Question</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Ans</th><th>Marks</th><th></th></tr>${e.questions.map(k=>`<tr><td>${esc(k.text)}</td><td>${esc(k.a)}</td><td>${esc(k.b)}</td><td>${esc(k.c)}</td><td>${esc(k.d)}</td><td>${k.correct}</td><td>${k.marks}</td><td><a onclick="dq(${k.id},${id})">Delete</a></td></tr>`).join('')}</table></div></div>
+ <div class=card><h3>Add question</h3><label>Question</label><input id=qt><div class=two><div><label>Option A</label><input id=qa></div><div><label>Option B</label><input id=qb></div><div><label>Option C</label><input id=qc></div><div><label>Option D</label><input id=qd></div></div>
+ <div class=two><div><label>Correct</label><select id=qk><option>A<option>B<option>C<option>D</select></div><div><label>Marks</label><input id=qm type=number value=1></div></div><button onclick="aq(${id})">Add question</button></div>`}
+async function upd(id){try{await api('/exams/'+id,'PUT',{title:$('#t').value,duration_min:+$('#du').value});alert('Saved')}catch(e){alert(e.message)}}
+async function dq(q,id){await api('/questions/'+q,'DELETE');examA(id)}
+async function aq(id){try{await api(`/exams/${id}/questions`,'POST',{text:$('#qt').value,a:$('#qa').value,b:$('#qb').value,c:$('#qc').value,d:$('#qd').value,correct:$('#qk').value,marks:+$('#qm').value});examA(id)}catch(e){alert(e.message)}}
+async function monitor(){const draw=async()=>{const [{attempts},{events}]=await Promise.all([api('/admin/monitoring'),api('/admin/suspicious-events')]);
+ A.innerHTML=`<h2>Monitoring <small style="color:var(--mut);font-size:13px">(auto-refresh 4s)</small></h2><div class=card><h3>Attempts</h3><div class=tw><table><tr><th>Student</th><th>Exam</th><th>Status</th><th>Connection</th><th>Answered</th><th>Score</th><th>Drops</th><th>Syncs</th><th>Flags</th><th>Last activity</th></tr>${attempts.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.title)}</td><td>${esc(a.status)}</td><td>${a.status=='in_progress'?(a.net=='offline'?'<span class="tag HIGH">OFFLINE</span>':'<span class="tag ok">online</span>'):'—'}</td><td>${a.answered}</td><td>${a.score==null?'—':a.score+'/'+a.total}</td><td>${a.drops}</td><td>${a.syncs}</td><td>${a.flags}</td><td>${fd(a.last_seen)}</td></tr>`).join('')}</table></div></div>
+ <div class=card><h3>Suspicious activity <small style="font-weight:400;color:var(--mut)">(transparent rule-based detection, not AI)</small></h3><div class=tw><table><tr><th>Severity</th><th>Rule</th><th>Student</th><th>Exam</th><th>Detail</th><th>Time</th></tr>${events.map(e=>`<tr><td>${tag(e.severity)}</td><td>${esc(e.rule)}</td><td>${esc(e.name)}</td><td>${esc(e.title||'—')}</td><td>${esc(e.detail)}</td><td>${fd(e.ts)}</td></tr>`).join('')}</table></div></div>`};
+ await draw();T.push(setInterval(()=>draw().catch(()=>{}),4000))}
+async function students(){const {students:s}=await api('/admin/students');A.innerHTML=`<h2>Students</h2><div class="card tw"><table><tr><th>ID</th><th>Name</th><th>Email</th><th>Attempts</th><th>Best score</th><th>Flags</th></tr>${s.map(x=>`<tr><td>${x.student_id}</td><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.attempts}</td><td>${x.best}</td><td>${x.flags}</td></tr>`).join('')}</table></div>`}
+async function audit(){const f=window._f||{};const qs=new URLSearchParams(Object.entries(f).filter(([k,v])=>v)).toString();const {logs}=await api('/admin/audit-logs?'+qs);
+ const ty=['LOGIN','LOGOUT','EXAM_STARTED','EXAM_SUBMITTED','ANSWER_SAVED','ANSWERS_SYNCHRONIZED','NETWORK_LOST','NETWORK_RESTORED','TAB_SWITCH','TAB_RETURN','SUSPICIOUS_ACTIVITY','LOGIN_FAILED','UNAUTHORIZED_ACCESS','TIME_EXPIRED'];
+ A.innerHTML=`<h2>Audit logs</h2><div class=card><div class=grid style="margin:0"><div><label>User ID</label><input id=fu value="${esc(f.user_id||'')}"></div><div><label>Exam ID</label><input id=fe value="${esc(f.exam_id||'')}"></div><div><label>Event type</label><select id=ft><option value="">All${ty.map(t=>`<option ${f.type==t?'selected':''}>${t}`).join('')}</select></div><div><label>Severity</label><select id=fs><option value="">All${['INFO','LOW','MEDIUM','HIGH'].map(t=>`<option ${f.severity==t?'selected':''}>${t}`).join('')}</select></div><div><label>Date</label><input id=fd type=date value="${esc(f.date||'')}"></div></div><button onclick="window._f={user_id:$('#fu').value,exam_id:$('#fe').value,type:$('#ft').value,severity:$('#fs').value,date:$('#fd').value};audit()">Filter</button></div>
+ <div class="card tw"><table><tr><th>Time</th><th>User</th><th>Exam</th><th>Event</th><th>Severity</th><th>Metadata</th><th>IP</th></tr>${logs.map(l=>`<tr><td>${fd(l.ts)}</td><td>${esc(l.name||l.user_id||'—')}</td><td>${l.exam_id||'—'}</td><td>${esc(l.type)}</td><td>${tag(l.severity)}</td><td><small>${esc(l.meta)}</small></td><td>${esc(l.ip||'')}</td></tr>`).join('')}</table></div>`}
+init();
+</script></body></html>
